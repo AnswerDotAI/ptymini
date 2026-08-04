@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ptymini"
+dynamic = ["version"]
+description = "Asyncio pty sessions: spawn, write, multi-client attach with replay, and a named registry"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "Apache-2.0"}
+authors = [{name = "Jeremy Howard", email = "github@jhoward.fastmail.fm"}]
+keywords = ['nbdev']
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+]
+dependencies = ['fastcore>=2.1.18', 'ptyprocess>=0.7']
+
+[project.urls]
+Repository = "https://github.com/AnswerDotAI/ptymini"
+Documentation = "https://AnswerDotAI.github.io/ptymini/"
+
+[project.entry-points.nbdev]
+ptymini = "ptymini._modidx:d"
+
+[tool.setuptools.dynamic]
+version = {attr = "ptymini.__version__"}
+
+[tool.setuptools.packages.find]
+include = ["ptymini"]
+
+[tool.nbdev]

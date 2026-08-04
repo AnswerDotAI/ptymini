@@ -1,0 +1,14 @@
+project:
+  output-dir: _docs
+
+website:
+  title: "ptymini"
+  site-url: "https://AnswerDotAI.github.io/ptymini"
+  description: "Asyncio pty sessions: spawn, write, multi-client attach with replay, and a named registry"
+  repo-branch: main
+  repo-url: "https://github.com/AnswerDotAI/ptymini"
+
+format-links:
+  - html
+  - format: commonmark
+    text: Markdown
