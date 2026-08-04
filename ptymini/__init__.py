@@ -5,4 +5,4 @@ Modules:
 - `ptymini.bg`: The bgterm API: sync, cursor-paged background terminal sessions
 - `ptymini.core`: `PtySession` and `PtyRegistry`: asyncio pty sessions over one offset-tracked output ring"""
 
-__version__ = "0.0.1"
+__version__ = "0.0.2"
