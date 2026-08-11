@@ -23,17 +23,17 @@ class BgtermError(RuntimeError):
 class PollResult:
     "Unread output returned by a `write_stdin()` or `poll()` call."
 
-    text: str
-    data: bytes
-    start_offset: int
-    end_offset: int
-    buffer_start_offset: int
-    buffer_end_offset: int
-    bytes_returned: int
-    remaining_bytes: int
-    dropped_bytes: int
-    running: bool
-    exit_code: int | None
+    text: str                 # `data` decoded with the session's encoding
+    data: bytes               # The unread bytes returned by this call
+    start_offset: int         # Absolute offset of the first returned byte
+    end_offset: int           # Absolute offset just past the last returned byte (the new cursor)
+    buffer_start_offset: int  # Absolute offset of the oldest byte the ring retains
+    buffer_end_offset: int    # Total bytes the session has ever output
+    bytes_returned: int       # Length of `data`
+    remaining_bytes: int      # Unread bytes still in the ring after this page
+    dropped_bytes: int        # Unread bytes lost to ring trimming before this read
+    running: bool             # Was the child still alive at read time?
+    exit_code: int | None     # Exit code once dead (negative: terminating signal number)
 
     @property
     def truncated(self):
@@ -117,8 +117,15 @@ def list_sessions():
     with _REGISTRY_LOCK: return tuple(sorted(_SESSIONS))
 
 
-def start_bgterm(cmd: Cmd | None = None, cwd: str | None = None, env: dict[str, str] | None = None, shell: bool | None = None, encoding: str="utf-8",
-    errors: str="replace", max_buffer_bytes: int=DEFAULT_MAX_BUFFER_BYTES):
+def start_bgterm(
+    cmd:Cmd=None,          # Command argv, or a string command line; None spawns `$SHELL`
+    cwd:str=None,          # Working directory for the child
+    env:dict=None,         # Child environment; None inherits this process's (`TERM=dumb` overlays either)
+    shell:bool=None,       # Run a string `cmd` via `/bin/sh -c`? None: yes when `cmd` is a string
+    encoding:str='utf-8',  # Decoding for `PollResult.text`
+    errors:str='replace',  # Decode error handling
+    max_buffer_bytes:int=DEFAULT_MAX_BUFFER_BYTES,  # Ring bound: how much unread output is retained
+):
     "Start a PTY-backed session and return its integer session id."
     session = _BgSession.start(cmd, cwd, env, shell, encoding, errors, max_buffer_bytes)
     with _REGISTRY_LOCK:
@@ -127,22 +134,37 @@ def start_bgterm(cmd: Cmd | None = None, cwd: str | None = None, env: dict[str, 
     return sid
 
 
-def write_stdin(sid: int, chars: str = "", yield_time_ms: int = 0, max_output_bytes: int | None = DEFAULT_MAX_OUTPUT_BYTES):
+def write_stdin(
+    sid:int,              # Session id from `start_bgterm`
+    chars:str|bytes='',   # Input to write; str encodes with the session's encoding, bytes pass through
+    yield_time_ms:int=0,  # Max ms to wait for output when none is unread
+    max_output_bytes:int=DEFAULT_MAX_OUTPUT_BYTES,  # Page size cap on returned bytes; None returns everything unread
+):
     "Write to a session PTY, wait briefly, and return unread output."
     return _lookup(sid).write_stdin(chars, yield_time_ms, max_output_bytes)
 
 
-def poll(sid: int, yield_time_ms: int = 0, max_output_bytes: int | None = DEFAULT_MAX_OUTPUT_BYTES):
+def poll(
+    sid:int,              # Session id from `start_bgterm`
+    yield_time_ms:int=0,  # Max ms to wait for output when none is unread
+    max_output_bytes:int=DEFAULT_MAX_OUTPUT_BYTES,  # Page size cap on returned bytes; None returns everything unread
+):
     "Wait for unread session output, then return it without writing input."
     return _lookup(sid).poll(yield_time_ms, max_output_bytes)
 
 
-def read(sid: int, max_output_bytes: int | None = DEFAULT_MAX_OUTPUT_BYTES):
+def read(
+    sid:int,  # Session id from `start_bgterm`
+    max_output_bytes:int=DEFAULT_MAX_OUTPUT_BYTES,  # Page size cap on returned bytes; None returns everything unread
+):
     "Return unread session output immediately."
     return _lookup(sid).read(max_output_bytes)
 
 
-def wait(sid: int, timeout_ms: int | None = None):
+def wait(
+    sid:int,              # Session id from `start_bgterm`
+    timeout_ms:int=None,  # Max ms to wait; None waits indefinitely
+):
     "Wait for a session to exit and return its exit code."
     return _lookup(sid).wait(timeout_ms)
 
@@ -157,7 +179,11 @@ def kill(sid: int):
     _lookup(sid).kill()
 
 
-def close_bgterm(sid: int, terminate: bool = True, kill_after_ms: int = 1000):
+def close_bgterm(
+    sid:int,                # Session id from `start_bgterm`
+    terminate:bool=True,    # Ask the child to exit (SIGTERM, then SIGKILL) before closing?
+    kill_after_ms:int=1000, # Ms to wait after each signal before escalating
+):
     "Close a session and remove it from the in-process registry."
     with _REGISTRY_LOCK: session = _SESSIONS.pop(int(sid), None)
     if session is None: return
@@ -166,19 +192,33 @@ def close_bgterm(sid: int, terminate: bool = True, kill_after_ms: int = 1000):
 class Session:
     "Thin OO wrapper around the sid-based bgterm API."
 
-    def __init__(self, sid: int, close_on_exit=True):
+    def __init__(self,
+        sid:int,                 # Session id from `start_bgterm`
+        close_on_exit:bool=True, # Close the session when a `with` block exits?
+    ):
         self.sid = int(sid)
         self.close_on_exit = close_on_exit
         self._closed = False
 
     @classmethod
-    def start(cls, cmd: Cmd | None = None, cwd: str | None = None, env: dict[str, str] | None = None, shell: bool | None = None, encoding: str="utf-8",
-        errors: str="replace", max_buffer_bytes: int=DEFAULT_MAX_BUFFER_BYTES, close_on_exit:bool=True):
+    def start(cls,
+        cmd:Cmd=None,          # Command argv, or a string command line; None spawns `$SHELL`
+        cwd:str=None,          # Working directory for the child
+        env:dict=None,         # Child environment; None inherits this process's (`TERM=dumb` overlays either)
+        shell:bool=None,       # Run a string `cmd` via `/bin/sh -c`? None: yes when `cmd` is a string
+        encoding:str='utf-8',  # Decoding for `PollResult.text`
+        errors:str='replace',  # Decode error handling
+        max_buffer_bytes:int=DEFAULT_MAX_BUFFER_BYTES,  # Ring bound: how much unread output is retained
+        close_on_exit:bool=True,  # Close the session when a `with` block exits?
+    ):
         "Start a PTY-backed session and wrap it in `Session`."
         return cls(start_bgterm(cmd, cwd, env, shell, encoding, errors, max_buffer_bytes), close_on_exit)
 
     @classmethod
-    def open(cls, sid: int, close_on_exit=False):
+    def open(cls,
+        sid:int,                  # An existing session id to wrap
+        close_on_exit:bool=False, # Close the session when a `with` block exits?
+    ):
         "Wrap an existing session id."
         _lookup(sid)
         return cls(sid, close_on_exit)
@@ -201,19 +241,30 @@ class Session:
         if self._closed: return None
         return _lookup(self.sid).exit_code
 
-    def write_stdin(self, chars: str | bytes = "", yield_time_ms: int = 0, max_output_bytes: int | None = DEFAULT_MAX_OUTPUT_BYTES):
+    def write_stdin(self,
+        chars:str|bytes='',   # Input to write; str encodes with the session's encoding, bytes pass through
+        yield_time_ms:int=0,  # Max ms to wait for output when none is unread
+        max_output_bytes:int=DEFAULT_MAX_OUTPUT_BYTES,  # Page size cap on returned bytes; None returns everything unread
+    ):
         "Write to this session PTY, wait briefly, and return unread output."
         return write_stdin(self.sid, chars, yield_time_ms, max_output_bytes)
 
-    def poll(self, yield_time_ms: int = 0, max_output_bytes: int | None = DEFAULT_MAX_OUTPUT_BYTES):
+    def poll(self,
+        yield_time_ms:int=0,  # Max ms to wait for output when none is unread
+        max_output_bytes:int=DEFAULT_MAX_OUTPUT_BYTES,  # Page size cap on returned bytes; None returns everything unread
+    ):
         "Wait for unread output from this session, then return it."
         return poll(self.sid, yield_time_ms, max_output_bytes)
 
-    def read(self, max_output_bytes: int | None = DEFAULT_MAX_OUTPUT_BYTES):
+    def read(self,
+        max_output_bytes:int=DEFAULT_MAX_OUTPUT_BYTES,  # Page size cap on returned bytes; None returns everything unread
+    ):
         "Return unread output from this session immediately."
         return read(self.sid, max_output_bytes)
 
-    def wait(self, timeout_ms: int | None = None):
+    def wait(self,
+        timeout_ms:int=None,  # Max ms to wait; None waits indefinitely
+    ):
         "Wait for this session to exit and return its exit code."
         return wait(self.sid, timeout_ms)
 
@@ -225,7 +276,10 @@ class Session:
         "Kill this session child process."
         kill(self.sid)
 
-    def close(self, terminate: bool = True, kill_after_ms: int = 1000):
+    def close(self,
+        terminate:bool=True,    # Ask the child to exit (SIGTERM, then SIGKILL) before closing?
+        kill_after_ms:int=1000, # Ms to wait after each signal before escalating
+    ):
         "Close this session and make repeated closes a no-op."
         if self._closed: return
         close_bgterm(self.sid, terminate, kill_after_ms)

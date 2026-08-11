@@ -57,6 +57,7 @@ class PtySession:
         seen_end:int=None,   # Wake when `ring.end` passes this (None: the value at call time)
         timeout:float=None,  # Max seconds to wait; None waits indefinitely
     )->bool:                 # True when new output or EOF arrived, False on timeout
+        "Wait until the ring grows past `seen_end`, or EOF."
         if seen_end is None: seen_end = self.core.end
         deadline = None if timeout is None else time.monotonic() + timeout
         while self.alive and self.core.end == seen_end:
