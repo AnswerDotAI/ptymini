@@ -8,6 +8,7 @@ description = "Pty sessions over one offset-tracked output ring: spawn, write, m
 repository = "https://github.com/AnswerDotAI/ptymini"
 homepage = "https://github.com/AnswerDotAI/ptymini"
 documentation = "https://AnswerDotAI.github.io/ptymini/"
+include = ["src/", "build.rs", "LICENSE", "README.md"]
 
 [lib]
 name = "ptymini"
