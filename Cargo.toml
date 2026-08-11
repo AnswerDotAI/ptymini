@@ -1,0 +1,22 @@
+[package]
+name = "ptymini"
+version = "0.0.2"
+edition = "2024"
+rust-version = "1.91"
+license = "Apache-2.0"
+description = "Pty sessions over one offset-tracked output ring: spawn, write, multi-client attach with replay"
+repository = "https://github.com/AnswerDotAI/ptymini"
+homepage = "https://github.com/AnswerDotAI/ptymini"
+documentation = "https://AnswerDotAI.github.io/ptymini/"
+
+[lib]
+name = "ptymini"
+crate-type = ["rlib", "cdylib"]
+
+[features]
+python = ["dep:pyo3"]
+extension-module = ["python", "pyo3/extension-module"]
+
+[dependencies]
+libc = "0.2"
+pyo3 = { version = ">=0.28", optional = true }

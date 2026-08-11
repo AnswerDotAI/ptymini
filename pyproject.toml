@@ -1,6 +1,6 @@
 [build-system]
-requires = ["setuptools>=64"]
-build-backend = "setuptools.build_meta"
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
 
 [project]
 name = "ptymini"
@@ -10,24 +10,29 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "Apache-2.0"}
 authors = [{name = "Jeremy Howard", email = "github@jhoward.fastmail.fm"}]
-keywords = ['nbdev']
 classifiers = [
+    "Programming Language :: Rust",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
 ]
-dependencies = ['fastcore>=2.1.18', 'ptyprocess>=0.7']
+dependencies = ['fastcore>=2.1.18']
+
+[project.optional-dependencies]
+dev = ["maturin>=1.0,<2.0", "pytest", "nbdev>=3", "fastship"]
 
 [project.urls]
 Repository = "https://github.com/AnswerDotAI/ptymini"
 Documentation = "https://AnswerDotAI.github.io/ptymini/"
 
-[project.entry-points.nbdev]
-ptymini = "ptymini._modidx:d"
+[tool.maturin]
+features = ["extension-module"]
+python-source = "python"
+module-name = "ptymini._core"
 
-[tool.setuptools.dynamic]
-version = {attr = "ptymini.__version__"}
+[tool.uv]
+cache-keys = [{ file = "pyproject.toml" }, { file = "src/**/*.rs" }, { file = "Cargo.toml" }]
 
-[tool.setuptools.packages.find]
-include = ["ptymini"]
+[tool.fastship]
+branch = "main"
 
 [tool.nbdev]
