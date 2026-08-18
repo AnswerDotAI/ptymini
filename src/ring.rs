@@ -16,12 +16,7 @@ pub struct Ring {
 
 impl Ring {
     pub fn new(max_bytes: usize) -> Ring {
-        Ring {
-            max_bytes,
-            chunks: VecDeque::new(),
-            start: 0,
-            end: 0,
-        }
+        Ring { max_bytes, chunks: VecDeque::new(), start: 0, end: 0 }
     }
 
     pub fn len(&self) -> usize {

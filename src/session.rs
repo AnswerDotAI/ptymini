@@ -19,10 +19,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use crate::ring::Ring;
 
 fn now() -> f64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs_f64()
+    SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs_f64()
 }
 
 pub struct State {
@@ -62,16 +59,9 @@ pub struct PtyCore {
 
 impl PtyCore {
     pub fn spawn(
-        argv: &[String],
-        cwd: Option<&str>,
-        env: Option<&HashMap<String, String>>,
-        rows: u16,
-        cols: u16,
-        buffer_bytes: usize,
+        argv: &[String], cwd: Option<&str>, env: Option<&HashMap<String, String>>, rows: u16, cols: u16, buffer_bytes: usize,
     ) -> io::Result<PtyCore> {
-        let first = argv
-            .first()
-            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "argv must not be empty"))?;
+        let first = argv.first().ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "argv must not be empty"))?;
         let (master, slave) = openpty(rows, cols)?;
         let mut cmd = Command::new(first);
         cmd.args(&argv[1..]);
@@ -100,12 +90,7 @@ impl PtyCore {
         drop(cmd); // close the parent's slave fds, so EOF can arrive on the master
         let pid = child.id() as i32;
         let inner = Arc::new(Inner {
-            state: Mutex::new(State {
-                ring: Ring::new(buffer_bytes),
-                alive: true,
-                exit_code: None,
-                last_activity: now(),
-            }),
+            state: Mutex::new(State { ring: Ring::new(buffer_bytes), alive: true, exit_code: None, last_activity: now() }),
             cond: Condvar::new(),
             callback: Mutex::new(None),
             master,
@@ -113,9 +98,7 @@ impl PtyCore {
             pid,
         });
         let t_inner = inner.clone();
-        thread::Builder::new()
-            .name("ptymini-reader".into())
-            .spawn(move || reader(t_inner))?;
+        thread::Builder::new().name("ptymini-reader".into()).spawn(move || reader(t_inner))?;
         Ok(PtyCore { inner })
     }
 
@@ -144,18 +127,9 @@ impl PtyCore {
     }
 
     pub fn resize(&self, rows: u16, cols: u16) -> io::Result<()> {
-        let ws = libc::winsize {
-            ws_row: rows,
-            ws_col: cols,
-            ws_xpixel: 0,
-            ws_ypixel: 0,
-        };
+        let ws = libc::winsize { ws_row: rows, ws_col: cols, ws_xpixel: 0, ws_ypixel: 0 };
         let r = unsafe { libc::ioctl(self.inner.master.as_raw_fd(), libc::TIOCSWINSZ as _, &ws) };
-        if r < 0 {
-            Err(io::Error::last_os_error())
-        } else {
-            Ok(())
-        }
+        if r < 0 { Err(io::Error::last_os_error()) } else { Ok(()) }
     }
 
     /// Signal the child. ESRCH when it is already reaped, matching kill(2).
@@ -164,20 +138,11 @@ impl PtyCore {
             return Err(io::Error::from_raw_os_error(libc::ESRCH));
         }
         let r = unsafe { libc::kill(self.inner.pid, sig) };
-        if r < 0 {
-            Err(io::Error::last_os_error())
-        } else {
-            Ok(())
-        }
+        if r < 0 { Err(io::Error::last_os_error()) } else { Ok(()) }
     }
 
     pub fn read_from(&self, offset: u64, max_bytes_out: Option<usize>) -> (Vec<u8>, u64, u64) {
-        self.inner
-            .state
-            .lock()
-            .unwrap()
-            .ring
-            .read_from(offset, max_bytes_out)
+        self.inner.state.lock().unwrap().ring.read_from(offset, max_bytes_out)
     }
 
     pub fn start(&self) -> u64 {
@@ -246,21 +211,8 @@ impl PtyCore {
 fn openpty(rows: u16, cols: u16) -> io::Result<(OwnedFd, OwnedFd)> {
     let mut master: libc::c_int = 0;
     let mut slave: libc::c_int = 0;
-    let mut ws = libc::winsize {
-        ws_row: rows,
-        ws_col: cols,
-        ws_xpixel: 0,
-        ws_ypixel: 0,
-    };
-    let r = unsafe {
-        libc::openpty(
-            &mut master,
-            &mut slave,
-            std::ptr::null_mut(),
-            std::ptr::null_mut(),
-            &mut ws,
-        )
-    };
+    let mut ws = libc::winsize { ws_row: rows, ws_col: cols, ws_xpixel: 0, ws_ypixel: 0 };
+    let r = unsafe { libc::openpty(&mut master, &mut slave, std::ptr::null_mut(), std::ptr::null_mut(), &mut ws) };
     if r < 0 {
         return Err(io::Error::last_os_error());
     }
@@ -285,13 +237,8 @@ fn reader(inner: Arc<Inner>) {
             break; // 0 at EOF (macOS), EIO once the child is gone (Linux)
         }
     }
-    let code = inner
-        .child
-        .lock()
-        .unwrap()
-        .take()
-        .and_then(|mut c| c.wait().ok())
-        .map(|s| s.code().unwrap_or_else(|| -s.signal().unwrap_or(0)));
+    let code =
+        inner.child.lock().unwrap().take().and_then(|mut c| c.wait().ok()).map(|s| s.code().unwrap_or_else(|| -s.signal().unwrap_or(0)));
     {
         let mut st = inner.state.lock().unwrap();
         st.alive = false;

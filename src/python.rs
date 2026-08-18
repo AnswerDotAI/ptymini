@@ -24,9 +24,7 @@ impl PyRing {
         if max_bytes <= 0 {
             return Err(PyValueError::new_err("max_bytes must be > 0"));
         }
-        Ok(Self {
-            inner: Ring::new(max_bytes as usize),
-        })
+        Ok(Self { inner: Ring::new(max_bytes as usize) })
     }
 
     /// Append `data`, trimming the oldest bytes to keep at most `max_bytes`.
@@ -36,12 +34,7 @@ impl PyRing {
 
     /// Read from absolute `offset`, returning `(data, new_offset, dropped)`.
     #[pyo3(signature = (offset, max_bytes_out=None))]
-    fn read_from<'py>(
-        &self,
-        py: Python<'py>,
-        offset: u64,
-        max_bytes_out: Option<usize>,
-    ) -> (Bound<'py, PyBytes>, u64, u64) {
+    fn read_from<'py>(&self, py: Python<'py>, offset: u64, max_bytes_out: Option<usize>) -> (Bound<'py, PyBytes>, u64, u64) {
         let (d, off, dropped) = self.inner.read_from(offset, max_bytes_out);
         (PyBytes::new(py, &d), off, dropped)
     }
@@ -80,24 +73,12 @@ impl PyPtyCore {
     #[new]
     #[pyo3(signature = (argv, cwd=None, env=None, rows=24, cols=80, buffer_bytes=1_000_000))]
     fn new(
-        argv: Vec<String>,
-        cwd: Option<String>,
-        env: Option<HashMap<String, String>>,
-        rows: u16,
-        cols: u16,
-        buffer_bytes: i64,
+        argv: Vec<String>, cwd: Option<String>, env: Option<HashMap<String, String>>, rows: u16, cols: u16, buffer_bytes: i64,
     ) -> PyResult<Self> {
         if buffer_bytes <= 0 {
             return Err(PyValueError::new_err("buffer_bytes must be > 0"));
         }
-        let core = PtyCore::spawn(
-            &argv,
-            cwd.as_deref(),
-            env.as_ref(),
-            rows,
-            cols,
-            buffer_bytes as usize,
-        )?;
+        let core = PtyCore::spawn(&argv, cwd.as_deref(), env.as_ref(), rows, cols, buffer_bytes as usize)?;
         Ok(Self { core })
     }
 
@@ -126,21 +107,14 @@ impl PyPtyCore {
     /// Send signal `sig` to the child. ProcessLookupError once it is reaped.
     fn kill(&self, sig: i32) -> PyResult<()> {
         match self.core.kill(sig) {
-            Err(e) if e.raw_os_error() == Some(libc::ESRCH) => {
-                Err(PyProcessLookupError::new_err("process not found"))
-            }
+            Err(e) if e.raw_os_error() == Some(libc::ESRCH) => Err(PyProcessLookupError::new_err("process not found")),
             r => Ok(r?),
         }
     }
 
     /// Read output from absolute `offset`, returning `(data, new_offset, dropped)`.
     #[pyo3(signature = (offset, max_bytes_out=None))]
-    fn read_from<'py>(
-        &self,
-        py: Python<'py>,
-        offset: u64,
-        max_bytes_out: Option<usize>,
-    ) -> (Bound<'py, PyBytes>, u64, u64) {
+    fn read_from<'py>(&self, py: Python<'py>, offset: u64, max_bytes_out: Option<usize>) -> (Bound<'py, PyBytes>, u64, u64) {
         let (d, off, dropped) = self.core.read_from(offset, max_bytes_out);
         (PyBytes::new(py, &d), off, dropped)
     }
