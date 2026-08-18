@@ -72,9 +72,7 @@ impl PyPtyCore {
     /// Spawn `argv` on a new pty; `env` of None inherits this process's environment.
     #[new]
     #[pyo3(signature = (argv, cwd=None, env=None, rows=24, cols=80, buffer_bytes=1_000_000))]
-    fn new(
-        argv: Vec<String>, cwd: Option<String>, env: Option<HashMap<String, String>>, rows: u16, cols: u16, buffer_bytes: i64,
-    ) -> PyResult<Self> {
+    fn new(argv: Vec<String>, cwd: Option<String>, env: Option<HashMap<String, String>>, rows: u16, cols: u16, buffer_bytes: i64) -> PyResult<Self> {
         if buffer_bytes <= 0 {
             return Err(PyValueError::new_err("buffer_bytes must be > 0"));
         }

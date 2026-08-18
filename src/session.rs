@@ -58,9 +58,7 @@ pub struct PtyCore {
 }
 
 impl PtyCore {
-    pub fn spawn(
-        argv: &[String], cwd: Option<&str>, env: Option<&HashMap<String, String>>, rows: u16, cols: u16, buffer_bytes: usize,
-    ) -> io::Result<PtyCore> {
+    pub fn spawn(argv: &[String], cwd: Option<&str>, env: Option<&HashMap<String, String>>, rows: u16, cols: u16, buffer_bytes: usize) -> io::Result<PtyCore> {
         let first = argv.first().ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "argv must not be empty"))?;
         let (master, slave) = openpty(rows, cols)?;
         let mut cmd = Command::new(first);
@@ -237,8 +235,7 @@ fn reader(inner: Arc<Inner>) {
             break; // 0 at EOF (macOS), EIO once the child is gone (Linux)
         }
     }
-    let code =
-        inner.child.lock().unwrap().take().and_then(|mut c| c.wait().ok()).map(|s| s.code().unwrap_or_else(|| -s.signal().unwrap_or(0)));
+    let code = inner.child.lock().unwrap().take().and_then(|mut c| c.wait().ok()).map(|s| s.code().unwrap_or_else(|| -s.signal().unwrap_or(0)));
     {
         let mut st = inner.state.lock().unwrap();
         st.alive = false;
