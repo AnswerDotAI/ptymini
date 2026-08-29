@@ -57,8 +57,7 @@ def test_functional_session_accepts_input_and_returns_echoed_output():
         ready = poll(sid, 500)
         assert "ready" in ready.text
 
-        reply = write_stdin(sid, "hello\n", 100)
-        if "ACK:hello" not in reply.text: reply = poll(sid, 500)
+        reply = write_stdin(sid, "hello\n", 2000, until=r"ACK:hello")
         assert "ACK:hello" in reply.text
     finally: close_bgterm(sid)
 

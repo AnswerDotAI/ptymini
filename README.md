@@ -7,6 +7,8 @@
 
 A `PtyRegistry` adds named get-or-create sessions, injected shell setup (`rc`), and inactivity culling. It carries no server, no framework, and no session persistence beyond the process. Web exposure belongs to the embedding app (e.g. [jupygate](https://github.com/AnswerDotAI/jupygate)), and durable session management belongs to tmux.
 
+`ptymini.bg` is the sync surface, for callers outside an event loop: kernel tools, plain scripts, an LLM deciding between actions. It is the [bgterm](https://github.com/AnswerDotAI/bgterm) API, folded in, with sid-named sessions and blocking calls. The wait parameters are `fastmux.bg`’s. `wait_ms` bounds the wait for new output. `until=` returns as soon as the accumulated text matches that regex. `settle_ms` keeps collecting until output has stopped for that long.
+
 ### Installation
 
 ``` sh
