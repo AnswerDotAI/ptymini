@@ -20,6 +20,9 @@ dependencies = ['fastcore>=2.1.18']
 [project.optional-dependencies]
 dev = ["maturin>=1.0,<2.0", "pytest", "nbdev>=3", "fastship"]
 
+[project.entry-points.pyskills]
+ptymini = "ptymini.skill"
+
 [project.urls]
 Repository = "https://github.com/AnswerDotAI/ptymini"
 Documentation = "https://AnswerDotAI.github.io/ptymini/"

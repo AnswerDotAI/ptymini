@@ -1,6 +1,6 @@
 """The bgterm API: sync, cursor-paged background terminal sessions
 
-The [bgterm](https://github.com/AnswerDotAI/bgterm) package, folded in: a *sync*, sid-based API for background terminal sessions — start once, send input later, wait a bounded time, read what arrived since your last look. It is the cursor view of a pty session, for callers that live outside an event loop (kernel tools, plain scripts, an LLM deciding between actions): each call runs directly against the sync Rust core and blocks, with the GIL released while waiting, so `write_stdin(sid, "2+2\n", 500)` means what it always meant. The buffering, paging, and drop accounting are the `Ring`'s, which was extracted from bgterm in the first place; `PollResult` and every function signature are unchanged from the original package.
+The [bgterm](https://github.com/AnswerDotAI/bgterm) package, folded in: a *sync*, sid-based API for background terminal sessions — start once, send input later, wait a bounded time, read what arrived since your last look. It is the cursor view of a pty session, for callers that live outside an event loop (kernel tools, plain scripts, an LLM deciding between actions): each call runs directly against the sync Rust core and blocks, with the GIL released while waiting, so `write_stdin(sid, "2+2\n", 500)` means what it always meant. The buffering, paging, and drop accounting are the `Ring`'s, which was extracted from bgterm in the first place. The wait parameters are `fastmux.bg`'s. `wait_ms` bounds the wait for new output. `until=` returns as soon as the accumulated text matches that regex. `settle_ms` keeps collecting until output has stopped for that long.
 
 Docs: https://AnswerDotAI.github.io/ptymini/bg.html.md"""
 
@@ -8,7 +8,7 @@ Docs: https://AnswerDotAI.github.io/ptymini/bg.html.md"""
 __all__ = ['DEFAULT_MAX_BUFFER_BYTES', 'DEFAULT_MAX_OUTPUT_BYTES', 'Cmd', 'BgtermError', 'PollResult', 'list_sessions',
            'start_bgterm', 'write_stdin', 'poll', 'read', 'wait', 'terminate', 'kill', 'close_bgterm', 'Session']
 
-import itertools, os, signal, threading
+import itertools, os, re, signal, threading, time
 from dataclasses import dataclass
 from ._core import PtyCore
 
@@ -69,17 +69,33 @@ class _BgSession:
         return PollResult(payload.decode(self.encoding, errors=self.errors), payload, start_offset, end_offset,
             r.start, r.end, len(payload), max(0, r.end - end_offset), dropped, self.s.alive, self.s.exit_code)
 
+    def _peek(self):
+        payload, _, _ = self.s.read_from(self.cursor, None)
+        return payload.decode(self.encoding, errors=self.errors)
+
     def read(self, max_output_bytes=DEFAULT_MAX_OUTPUT_BYTES): return self._read(max_output_bytes)
 
-    def write_stdin(self, chars='', yield_time_ms=0, max_output_bytes=DEFAULT_MAX_OUTPUT_BYTES):
+    def write_stdin(self, chars='', wait_ms=0, max_output_bytes=DEFAULT_MAX_OUTPUT_BYTES, until=None, settle_ms=0):
         if chars:
             data = chars if isinstance(chars, bytes) else chars.encode(self.encoding)
             try: self.s.write(data)
             except OSError as e: raise BgtermError('session PTY is no longer writable') from e
-        if yield_time_ms > 0 and self.cursor >= self.s.end and self.s.alive: self.s.wait_change(timeout=yield_time_ms / 1000)
+        s, deadline = self.s, time.monotonic() + wait_ms / 1000
+        if until is not None:
+            while not re.search(until, self._peek()) and time.monotonic() < deadline:
+                seen = s.end
+                s.wait_change(seen, max(0.0, deadline - time.monotonic()))
+                if s.end == seen: break
+        elif wait_ms > 0 and self.cursor >= s.end and s.alive: s.wait_change(self.cursor, wait_ms / 1000)
+        if settle_ms:
+            hard = deadline + settle_ms / 1000
+            while time.monotonic() < hard:
+                seen = s.end
+                if not s.wait_change(seen, min(settle_ms / 1000, hard - time.monotonic())) or s.end == seen: break
         return self._read(max_output_bytes)
 
-    def poll(self, yield_time_ms=0, max_output_bytes=DEFAULT_MAX_OUTPUT_BYTES): return self.write_stdin('', yield_time_ms, max_output_bytes)
+    def poll(self, wait_ms=0, max_output_bytes=DEFAULT_MAX_OUTPUT_BYTES, until=None, settle_ms=0):
+        return self.write_stdin('', wait_ms, max_output_bytes, until, settle_ms)
 
     def wait(self, timeout_ms=None): return self.s.wait(timeout=None if timeout_ms is None else max(timeout_ms, 0) / 1000)
 
@@ -135,22 +151,26 @@ def start_bgterm(
 
 
 def write_stdin(
-    sid:int,              # Session id from `start_bgterm`
-    chars:str|bytes='',   # Input to write; str encodes with the session's encoding, bytes pass through
-    yield_time_ms:int=0,  # Max ms to wait for output when none is unread
+    sid:int,             # Session id from `start_bgterm`
+    chars:str|bytes='',  # Input to write; str encodes with the session's encoding, bytes pass through
+    wait_ms:int=0,       # Max ms to wait for output when none is unread (with `until`: for the match)
     max_output_bytes:int=DEFAULT_MAX_OUTPUT_BYTES,  # Page size cap on returned bytes; None returns everything unread
+    until:str=None,      # Regex; return as soon as this call's accumulated unread text matches
+    settle_ms:int=0,     # Then keep collecting until output stops for this long (at most `settle_ms` past the deadline)
 ):
-    "Write to a session PTY, wait briefly, and return unread output."
-    return _lookup(sid).write_stdin(chars, yield_time_ms, max_output_bytes)
+    "Write to a session PTY, wait as `poll` does, and return unread output."
+    return _lookup(sid).write_stdin(chars, wait_ms, max_output_bytes, until, settle_ms)
 
 
 def poll(
-    sid:int,              # Session id from `start_bgterm`
-    yield_time_ms:int=0,  # Max ms to wait for output when none is unread
+    sid:int,             # Session id from `start_bgterm`
+    wait_ms:int=0,       # Max ms to wait for output when none is unread (with `until`: for the match)
     max_output_bytes:int=DEFAULT_MAX_OUTPUT_BYTES,  # Page size cap on returned bytes; None returns everything unread
+    until:str=None,      # Regex; return as soon as this call's accumulated unread text matches
+    settle_ms:int=0,     # Then keep collecting until output stops for this long (at most `settle_ms` past the deadline)
 ):
-    "Wait for unread session output, then return it without writing input."
-    return _lookup(sid).poll(yield_time_ms, max_output_bytes)
+    "Wait for unread session output (or an `until` match, or settling), then return it without writing input."
+    return _lookup(sid).poll(wait_ms, max_output_bytes, until, settle_ms)
 
 
 def read(
@@ -243,18 +263,22 @@ class Session:
 
     def write_stdin(self,
         chars:str|bytes='',   # Input to write; str encodes with the session's encoding, bytes pass through
-        yield_time_ms:int=0,  # Max ms to wait for output when none is unread
+        wait_ms:int=0,        # Max ms to wait for output when none is unread (with `until`: for the match)
         max_output_bytes:int=DEFAULT_MAX_OUTPUT_BYTES,  # Page size cap on returned bytes; None returns everything unread
+        until:str=None,       # Regex; return as soon as this call's accumulated unread text matches
+        settle_ms:int=0,      # Then keep collecting until output stops for this long (at most `settle_ms` past the deadline)
     ):
-        "Write to this session PTY, wait briefly, and return unread output."
-        return write_stdin(self.sid, chars, yield_time_ms, max_output_bytes)
+        "Write to this session PTY, wait as `poll` does, and return unread output."
+        return write_stdin(self.sid, chars, wait_ms, max_output_bytes, until, settle_ms)
 
     def poll(self,
-        yield_time_ms:int=0,  # Max ms to wait for output when none is unread
+        wait_ms:int=0,        # Max ms to wait for output when none is unread (with `until`: for the match)
         max_output_bytes:int=DEFAULT_MAX_OUTPUT_BYTES,  # Page size cap on returned bytes; None returns everything unread
+        until:str=None,       # Regex; return as soon as this call's accumulated unread text matches
+        settle_ms:int=0,      # Then keep collecting until output stops for this long (at most `settle_ms` past the deadline)
     ):
         "Wait for unread output from this session, then return it."
-        return poll(self.sid, yield_time_ms, max_output_bytes)
+        return poll(self.sid, wait_ms, max_output_bytes, until, settle_ms)
 
     def read(self,
         max_output_bytes:int=DEFAULT_MAX_OUTPUT_BYTES,  # Page size cap on returned bytes; None returns everything unread
