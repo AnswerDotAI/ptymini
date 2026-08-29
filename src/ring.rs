@@ -15,17 +15,11 @@ pub struct Ring {
 }
 
 impl Ring {
-    pub fn new(max_bytes: usize) -> Ring {
-        Ring { max_bytes, chunks: VecDeque::new(), start: 0, end: 0 }
-    }
+    pub fn new(max_bytes: usize) -> Ring { Ring { max_bytes, chunks: VecDeque::new(), start: 0, end: 0 } }
 
-    pub fn len(&self) -> usize {
-        (self.end - self.start) as usize
-    }
+    pub fn len(&self) -> usize { (self.end - self.start) as usize }
 
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
+    pub fn is_empty(&self) -> bool { self.len() == 0 }
 
     pub fn append(&mut self, data: &[u8]) {
         self.chunks.push_back((self.end, data.to_vec()));
@@ -53,23 +47,15 @@ impl Ring {
         let cur = offset.max(self.start);
         let mut out: Vec<u8> = Vec::new();
         for (off, d) in &self.chunks {
-            if off + d.len() as u64 <= cur {
-                continue;
-            }
+            if off + d.len() as u64 <= cur { continue; }
             let from = cur.saturating_sub(*off) as usize;
             let mut piece = &d[from..];
-            if let Some(m) = max_bytes_out {
-                piece = &piece[..piece.len().min(m - out.len())];
-            }
-            if piece.is_empty() {
-                break;
-            }
+            if let Some(m) = max_bytes_out { piece = &piece[..piece.len().min(m - out.len())]; }
+            if piece.is_empty() { break; }
             out.extend_from_slice(piece);
             if let Some(m) = max_bytes_out
                 && out.len() >= m
-            {
-                break;
-            }
+            { break; }
         }
         let new_off = cur + out.len() as u64;
         (out, new_off, dropped)

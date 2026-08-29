@@ -18,9 +18,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use crate::ring::Ring;
 
-fn now() -> f64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs_f64()
-}
+fn now() -> f64 { SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs_f64() }
 
 pub struct State {
     pub ring: Ring,
@@ -47,15 +45,11 @@ impl Inner {
     fn notify(&self) {
         self.cond.notify_all();
         let cb = self.callback.lock().unwrap().clone();
-        if let Some(cb) = cb {
-            cb();
-        }
+        if let Some(cb) = cb { cb(); }
     }
 }
 
-pub struct PtyCore {
-    inner: Arc<Inner>,
-}
+pub struct PtyCore { inner: Arc<Inner> }
 
 impl PtyCore {
     pub fn spawn(argv: &[String], cwd: Option<&str>, env: Option<&HashMap<String, String>>, rows: u16, cols: u16, buffer_bytes: usize) -> io::Result<PtyCore> {
@@ -63,9 +57,7 @@ impl PtyCore {
         let (master, slave) = openpty(rows, cols)?;
         let mut cmd = Command::new(first);
         cmd.args(&argv[1..]);
-        if let Some(c) = cwd {
-            cmd.current_dir(c);
-        }
+        if let Some(c) = cwd { cmd.current_dir(c); }
         if let Some(e) = env {
             cmd.env_clear();
             cmd.envs(e);
@@ -75,12 +67,8 @@ impl PtyCore {
         cmd.stderr(Stdio::from(slave));
         unsafe {
             cmd.pre_exec(|| {
-                if libc::setsid() < 0 {
-                    return Err(io::Error::last_os_error());
-                }
-                if libc::ioctl(0, libc::TIOCSCTTY as _, 0) < 0 {
-                    return Err(io::Error::last_os_error());
-                }
+                if libc::setsid() < 0 { return Err(io::Error::last_os_error()); }
+                if libc::ioctl(0, libc::TIOCSCTTY as _, 0) < 0 { return Err(io::Error::last_os_error()); }
                 Ok(())
             });
         }
@@ -102,9 +90,7 @@ impl PtyCore {
 
     /// Replace the change hook, called (from the reader thread) after every
     /// ring append and once at EOF.
-    pub fn set_callback(&self, cb: Callback) {
-        *self.inner.callback.lock().unwrap() = Some(cb);
-    }
+    pub fn set_callback(&self, cb: Callback) { *self.inner.callback.lock().unwrap() = Some(cb); }
 
     pub fn write(&self, data: &[u8]) -> io::Result<()> {
         self.inner.state.lock().unwrap().last_activity = now();
@@ -114,9 +100,7 @@ impl PtyCore {
             let n = unsafe { libc::write(fd, rest.as_ptr() as *const libc::c_void, rest.len()) };
             if n < 0 {
                 let e = io::Error::last_os_error();
-                if e.raw_os_error() == Some(libc::EINTR) {
-                    continue;
-                }
+                if e.raw_os_error() == Some(libc::EINTR) { continue; }
                 return Err(e);
             }
             rest = &rest[n as usize..];
@@ -132,9 +116,7 @@ impl PtyCore {
 
     /// Signal the child. ESRCH when it is already reaped, matching kill(2).
     pub fn kill(&self, sig: i32) -> io::Result<()> {
-        if !self.alive() {
-            return Err(io::Error::from_raw_os_error(libc::ESRCH));
-        }
+        if !self.alive() { return Err(io::Error::from_raw_os_error(libc::ESRCH)); }
         let r = unsafe { libc::kill(self.inner.pid, sig) };
         if r < 0 { Err(io::Error::last_os_error()) } else { Ok(()) }
     }
@@ -143,24 +125,12 @@ impl PtyCore {
         self.inner.state.lock().unwrap().ring.read_from(offset, max_bytes_out)
     }
 
-    pub fn start(&self) -> u64 {
-        self.inner.state.lock().unwrap().ring.start
-    }
-    pub fn end(&self) -> u64 {
-        self.inner.state.lock().unwrap().ring.end
-    }
-    pub fn alive(&self) -> bool {
-        self.inner.state.lock().unwrap().alive
-    }
-    pub fn exit_code(&self) -> Option<i32> {
-        self.inner.state.lock().unwrap().exit_code
-    }
-    pub fn last_activity(&self) -> f64 {
-        self.inner.state.lock().unwrap().last_activity
-    }
-    pub fn set_last_activity(&self, v: f64) {
-        self.inner.state.lock().unwrap().last_activity = v;
-    }
+    pub fn start(&self) -> u64 { self.inner.state.lock().unwrap().ring.start }
+    pub fn end(&self) -> u64 { self.inner.state.lock().unwrap().ring.end }
+    pub fn alive(&self) -> bool { self.inner.state.lock().unwrap().alive }
+    pub fn exit_code(&self) -> Option<i32> { self.inner.state.lock().unwrap().exit_code }
+    pub fn last_activity(&self) -> f64 { self.inner.state.lock().unwrap().last_activity }
+    pub fn set_last_activity(&self, v: f64) { self.inner.state.lock().unwrap().last_activity = v; }
 
     /// Block until `ring.end` passes `seen_end` (default: its value now) or
     /// EOF; false on timeout. The sync twin of the Python bridge's
@@ -174,9 +144,7 @@ impl PtyCore {
                 None => st = self.inner.cond.wait(st).unwrap(),
                 Some(d) => {
                     let left = d.saturating_duration_since(Instant::now());
-                    if left.is_zero() {
-                        return false;
-                    }
+                    if left.is_zero() { return false; }
                     st = self.inner.cond.wait_timeout(st, left).unwrap().0;
                 }
             }
@@ -195,9 +163,7 @@ impl PtyCore {
                 None => st = self.inner.cond.wait(st).unwrap(),
                 Some(d) => {
                     let left = d.saturating_duration_since(Instant::now());
-                    if left.is_zero() {
-                        return None;
-                    }
+                    if left.is_zero() { return None; }
                     st = self.inner.cond.wait_timeout(st, left).unwrap().0;
                 }
             }
@@ -211,9 +177,7 @@ fn openpty(rows: u16, cols: u16) -> io::Result<(OwnedFd, OwnedFd)> {
     let mut slave: libc::c_int = 0;
     let mut ws = libc::winsize { ws_row: rows, ws_col: cols, ws_xpixel: 0, ws_ypixel: 0 };
     let r = unsafe { libc::openpty(&mut master, &mut slave, std::ptr::null_mut(), std::ptr::null_mut(), &mut ws) };
-    if r < 0 {
-        return Err(io::Error::last_os_error());
-    }
+    if r < 0 { return Err(io::Error::last_os_error()); }
     unsafe { Ok((OwnedFd::from_raw_fd(master), OwnedFd::from_raw_fd(slave))) }
 }
 
@@ -229,9 +193,7 @@ fn reader(inner: Arc<Inner>) {
                 st.last_activity = now();
             }
             inner.notify();
-        } else if n < 0 && io::Error::last_os_error().raw_os_error() == Some(libc::EINTR) {
-            continue;
-        } else {
+        } else if n < 0 && io::Error::last_os_error().raw_os_error() == Some(libc::EINTR) { continue; } else {
             break; // 0 at EOF (macOS), EIO once the child is gone (Linux)
         }
     }
