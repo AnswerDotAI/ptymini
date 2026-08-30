@@ -33,7 +33,7 @@ python-source = "python"
 module-name = "ptymini._core"
 
 [tool.uv]
-cache-keys = [{ file = "pyproject.toml" }, { file = "src/**/*.rs" }, { file = "Cargo.toml" }]
+cache-keys = [{ file = "pyproject.toml" }, { file = "src/**/*.rs" }, { file = "Cargo.toml" }, { file = ".git/fastws-cargo-key" }]
 
 [tool.fastship]
 branch = "main"
