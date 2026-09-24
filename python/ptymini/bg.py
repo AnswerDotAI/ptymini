@@ -1,4 +1,4 @@
-"""The bgterm API: sync, cursor-paged background terminal sessions
+r"""The bgterm API: sync, cursor-paged background terminal sessions
 
 The [bgterm](https://github.com/AnswerDotAI/bgterm) package, folded in: a *sync*, sid-based API for background terminal sessions — start once, send input later, wait a bounded time, read what arrived since your last look. It is the cursor view of a pty session, for callers that live outside an event loop (kernel tools, plain scripts, an LLM deciding between actions): each call runs directly against the sync Rust core and blocks, with the GIL released while waiting, so `write_stdin(sid, "2+2\n", 500)` means what it always meant. The buffering, paging, and drop accounting are the `Ring`'s, which was extracted from bgterm in the first place. The wait parameters are `fastmux.bg`'s. `wait_ms` bounds the wait for new output. `until=` returns as soon as the accumulated text matches that regex. `settle_ms` keeps collecting until output has stopped for that long.
 
@@ -9,7 +9,7 @@ __all__ = ['DEFAULT_MAX_BUFFER_BYTES', 'DEFAULT_MAX_OUTPUT_BYTES', 'Cmd', 'Bgter
            'start_bgterm', 'write_stdin', 'poll', 'read', 'wait', 'terminate', 'kill', 'close_bgterm', 'Session']
 
 import itertools, os, re, signal, threading, time
-from dataclasses import dataclass
+from fastcore.basics import BasicRepr, store_attr
 from ._core import PtyCore
 
 DEFAULT_MAX_BUFFER_BYTES = 1_000_000
@@ -19,21 +19,21 @@ Cmd = str | list[str]
 class BgtermError(RuntimeError):
     "Raised when a bgterm session cannot be started, found, or controlled."
 
-@dataclass(slots=True)
-class PollResult:
+class PollResult(BasicRepr):
     "Unread output returned by a `write_stdin()` or `poll()` call."
-
-    text: str                 # `data` decoded with the session's encoding
-    data: bytes               # The unread bytes returned by this call
-    start_offset: int         # Absolute offset of the first returned byte
-    end_offset: int           # Absolute offset just past the last returned byte (the new cursor)
-    buffer_start_offset: int  # Absolute offset of the oldest byte the ring retains
-    buffer_end_offset: int    # Total bytes the session has ever output
-    bytes_returned: int       # Length of `data`
-    remaining_bytes: int      # Unread bytes still in the ring after this page
-    dropped_bytes: int        # Unread bytes lost to ring trimming before this read
-    running: bool             # Was the child still alive at read time?
-    exit_code: int | None     # Exit code once dead (negative: terminating signal number)
+    def __init__(self,
+        text:str, # `data` decoded with the session's encoding
+        data:bytes, # The unread bytes returned by this call
+        start_offset:int, # Absolute offset of the first returned byte
+        end_offset:int, # Absolute offset just past the last returned byte (the new cursor)
+        buffer_start_offset:int, # Absolute offset of the oldest byte the ring retains
+        buffer_end_offset:int, # Total bytes the session has ever output
+        bytes_returned:int, # Length of `data`
+        remaining_bytes:int, # Unread bytes still in the ring after this page
+        dropped_bytes:int, # Unread bytes lost to ring trimming before this read
+        running:bool, # Was the child still alive at read time?
+        exit_code:int|None, # Exit code once dead (negative: terminating signal number)
+    ): store_attr()
 
     @property
     def truncated(self):
