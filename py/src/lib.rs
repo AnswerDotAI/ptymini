@@ -6,8 +6,8 @@ use pyo3::types::PyBytes;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::ring::Ring;
-use crate::session::PtyCore;
+use ptymini::PtyCore;
+use ptymini::Ring;
 
 /// Bounded byte buffer with absolute offsets: `start`..`end` of the retained
 /// window, `end` = total bytes ever appended.

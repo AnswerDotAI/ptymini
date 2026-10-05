@@ -7,8 +7,6 @@
 //! embedding wraps the same two primitives (`read_from` plus the change
 //! hook).
 
-#[cfg(feature = "python")]
-mod python;
 mod ring;
 mod session;
 

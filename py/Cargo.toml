@@ -1,0 +1,17 @@
+[package]
+name = "ptymini-py"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+test = false
+
+[dependencies]
+ptymini = { path = ".." }
+libc.workspace = true
+pyo3 = { version = ">=0.28", features = ["extension-module"] }
+
+[build-dependencies]
+pyo3-build-config = "0.29"

@@ -1,32 +1,43 @@
-[package]
-name = "ptymini"
+[workspace]
+members = ["py"]
+default-members = [".", "py"]
+
+[workspace.package]
 version = "0.0.6"
 edition = "2024"
+
+[workspace.dependencies]
+libc = "0.2"
+
+[package]
+name = "ptymini"
+version.workspace = true
+edition.workspace = true
 rust-version = "1.91"
 license = "Apache-2.0"
 description = "Pty sessions over one offset-tracked output ring: spawn, write, multi-client attach with replay"
 repository = "https://github.com/AnswerDotAI/ptymini"
 homepage = "https://github.com/AnswerDotAI/ptymini"
 documentation = "https://AnswerDotAI.github.io/ptymini/"
-include = ["src/", "build.rs", "LICENSE", "README.md"]
+include = ["src/", "LICENSE", "README.md"]
 
 [lib]
 name = "ptymini"
-crate-type = ["rlib", "cdylib"]
-
-[features]
-python = ["dep:pyo3"]
-extension-module = ["python", "pyo3/extension-module"]
 
 [dependencies]
-libc = "0.2"
-pyo3 = { version = ">=0.28", optional = true }
+libc.workspace = true
+
+[profile.test]
+inherits = "release"
 
 [profile.release]
 lto = false
 codegen-units = 16
 
 [profile.release.package.ptymini]
+incremental = true
+
+[profile.release.package.ptymini-py]
 incremental = true
 
 [profile.dist]
@@ -37,4 +48,7 @@ codegen-units = 1
 strip = true
 
 [profile.dist.package.ptymini]
+incremental = false
+
+[profile.dist.package.ptymini-py]
 incremental = false
