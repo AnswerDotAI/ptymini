@@ -47,12 +47,12 @@ class _BgSession:
 
     @classmethod
     def start(cls, cmd:Cmd=None, cwd=None, env=None, shell=None, encoding='utf-8', errors='replace',
-        max_buffer_bytes=DEFAULT_MAX_BUFFER_BYTES):
+        max_buffer_bytes=DEFAULT_MAX_BUFFER_BYTES, term='dumb'):
         if cmd is None: cmd = os.environ.get('SHELL', '/bin/sh')
         if shell is None: shell = isinstance(cmd, str)
         if shell and isinstance(cmd, str): cmd = ['/bin/sh', '-c', cmd]
         elif isinstance(cmd, str): cmd = [cmd]
-        env = dict(os.environ if env is None else env, TERM='dumb')
+        env = dict(os.environ if env is None else env, TERM=term)
         return cls(PtyCore(list(cmd), cwd=cwd, env=env, buffer_bytes=max_buffer_bytes), encoding, errors)
 
     @property
@@ -136,14 +136,15 @@ def list_sessions():
 def start_bgterm(
     cmd:Cmd=None,          # Command argv, or a string command line; None spawns `$SHELL`
     cwd:str=None,          # Working directory for the child
-    env:dict=None,         # Child environment; None inherits this process's (`TERM=dumb` overlays either)
+    env:dict=None,         # Child environment; None inherits this process's; `term` replaces its `TERM`
     shell:bool=None,       # Run a string `cmd` via `/bin/sh -c`? None: yes when `cmd` is a string
     encoding:str='utf-8',  # Decoding for `PollResult.text`
     errors:str='replace',  # Decode error handling
     max_buffer_bytes:int=DEFAULT_MAX_BUFFER_BYTES,  # Ring bound: how much unread output is retained
+    term:str='dumb',       # The child's `TERM`; `'dumb'` turns off colours and line editing in most programs
 ):
     "Start a PTY-backed session and return its integer session id."
-    session = _BgSession.start(cmd, cwd, env, shell, encoding, errors, max_buffer_bytes)
+    session = _BgSession.start(cmd, cwd, env, shell, encoding, errors, max_buffer_bytes, term)
     with _REGISTRY_LOCK:
         sid = next(_NEXT_SID)
         _SESSIONS[sid] = session
@@ -224,15 +225,16 @@ class Session:
     def start(cls,
         cmd:Cmd=None,          # Command argv, or a string command line; None spawns `$SHELL`
         cwd:str=None,          # Working directory for the child
-        env:dict=None,         # Child environment; None inherits this process's (`TERM=dumb` overlays either)
+        env:dict=None,         # Child environment; None inherits this process's; `term` replaces its `TERM`
         shell:bool=None,       # Run a string `cmd` via `/bin/sh -c`? None: yes when `cmd` is a string
         encoding:str='utf-8',  # Decoding for `PollResult.text`
         errors:str='replace',  # Decode error handling
         max_buffer_bytes:int=DEFAULT_MAX_BUFFER_BYTES,  # Ring bound: how much unread output is retained
         close_on_exit:bool=True,  # Close the session when a `with` block exits?
+        term:str='dumb',       # The child's `TERM`; `'dumb'` turns off colours and line editing in most programs
     ):
         "Start a PTY-backed session and wrap it in `Session`."
-        return cls(start_bgterm(cmd, cwd, env, shell, encoding, errors, max_buffer_bytes), close_on_exit)
+        return cls(start_bgterm(cmd, cwd, env, shell, encoding, errors, max_buffer_bytes, term), close_on_exit)
 
     @classmethod
     def open(cls,
