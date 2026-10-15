@@ -65,7 +65,9 @@ impl PyPtyCore {
     /// Replace the change hook. It runs on the reader thread after every ring
     /// append and once at EOF; exceptions are printed and swallowed.
     fn set_callback(&self, cb: Py<PyAny>) {
-        self.core.set_callback(Arc::new(move || { Python::attach(|py| { if let Err(e) = cb.call0(py) { e.print(py); } }); }));
+        self.core.set_callback(Arc::new(move || {
+            Python::attach(|py| { if let Err(e) = cb.call0(py) { e.print(py); } });
+        }));
     }
 
     /// Write `data` to the pty (the child's input).

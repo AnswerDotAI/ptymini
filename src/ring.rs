@@ -7,12 +7,7 @@
 
 use std::collections::VecDeque;
 
-pub struct Ring {
-    pub max_bytes: usize,
-    chunks: VecDeque<(u64, Vec<u8>)>,
-    pub start: u64,
-    pub end: u64,
-}
+pub struct Ring { pub max_bytes: usize, chunks: VecDeque<(u64, Vec<u8>)>, pub start: u64, pub end: u64 }
 
 impl Ring {
     pub fn new(max_bytes: usize) -> Ring { Ring { max_bytes, chunks: VecDeque::new(), start: 0, end: 0 } }
@@ -53,9 +48,7 @@ impl Ring {
             if let Some(m) = max_bytes_out { piece = &piece[..piece.len().min(m - out.len())]; }
             if piece.is_empty() { break; }
             out.extend_from_slice(piece);
-            if let Some(m) = max_bytes_out
-                && out.len() >= m
-            { break; }
+            if let Some(m) = max_bytes_out && out.len() >= m { break; }
         }
         let new_off = cur + out.len() as u64;
         (out, new_off, dropped)

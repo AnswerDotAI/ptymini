@@ -20,23 +20,11 @@ use crate::ring::Ring;
 
 fn now() -> f64 { SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs_f64() }
 
-pub struct State {
-    pub ring: Ring,
-    pub alive: bool,
-    pub exit_code: Option<i32>,
-    pub last_activity: f64,
-}
+pub struct State { pub ring: Ring, pub alive: bool, pub exit_code: Option<i32>, pub last_activity: f64 }
 
 type Callback = Arc<dyn Fn() + Send + Sync>;
 
-struct Inner {
-    state: Mutex<State>,
-    cond: Condvar,
-    callback: Mutex<Option<Callback>>,
-    master: OwnedFd,
-    child: Mutex<Option<Child>>,
-    pid: i32,
-}
+struct Inner { state: Mutex<State>, cond: Condvar, callback: Mutex<Option<Callback>>, master: OwnedFd, child: Mutex<Option<Child>>, pid: i32 }
 
 impl Inner {
     // Snapshot the callback out of its lock before calling: the callback may
@@ -75,14 +63,8 @@ impl PtyCore {
         let child = cmd.spawn()?;
         drop(cmd); // close the parent's slave fds, so EOF can arrive on the master
         let pid = child.id() as i32;
-        let inner = Arc::new(Inner {
-            state: Mutex::new(State { ring: Ring::new(buffer_bytes), alive: true, exit_code: None, last_activity: now() }),
-            cond: Condvar::new(),
-            callback: Mutex::new(None),
-            master,
-            child: Mutex::new(Some(child)),
-            pid,
-        });
+        let inner = Arc::new(Inner { state: Mutex::new(State { ring: Ring::new(buffer_bytes), alive: true, exit_code: None, last_activity: now() }),
+            cond: Condvar::new(), callback: Mutex::new(None), master, child: Mutex::new(Some(child)), pid });
         let t_inner = inner.clone();
         thread::Builder::new().name("ptymini-reader".into()).spawn(move || reader(t_inner))?;
         Ok(PtyCore { inner })
