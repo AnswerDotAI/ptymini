@@ -109,10 +109,11 @@ async def attach(self:PtySession,
     "Async byte stream over the session's output: replay, then live; ends at EOF."
     off = self.core.start if from_start else self.core.end
     while True:
+        alive = self.alive  # read before the ring: the reader marks the session dead only after its last append
         data, off, dropped = self.read_from(off)
         if dropped and gaps: yield Gap(dropped)
         if data: yield data
-        elif not self.alive: return
+        elif not alive: return
         else: await self.wait_change(seen_end=off)
 
 
