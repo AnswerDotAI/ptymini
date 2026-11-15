@@ -20,7 +20,7 @@ class BgtermError(RuntimeError):
     "Raised when a bgterm session cannot be started, found, or controlled."
 
 class PollResult(BasicRepr):
-    "Unread output returned by a `write_stdin()` or `poll()` call."
+    "Unread output returned by a `write_stdin()`, `poll()` or `read()` call."
     def __init__(self,
         text:str, # `data` decoded with the session's encoding
         data:bytes, # The unread bytes returned by this call
