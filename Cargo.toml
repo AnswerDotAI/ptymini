@@ -22,6 +22,7 @@ include = ["src/", "LICENSE", "README.md"]
 
 [lib]
 name = "ptymini"
+test = false
 
 [dependencies]
 libc.workspace = true
