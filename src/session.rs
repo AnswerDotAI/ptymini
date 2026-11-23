@@ -9,6 +9,8 @@
 
 use std::collections::HashMap;
 use std::io;
+use std::fs;
+use std::path::PathBuf;
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::process::{Child, Command, Stdio};
@@ -24,9 +26,17 @@ pub struct State { pub ring: Ring, pub alive: bool, pub exit_code: Option<i32>, 
 
 type Callback = Arc<dyn Fn() + Send + Sync>;
 
-struct Inner { state: Mutex<State>, cond: Condvar, callback: Mutex<Option<Callback>>, master: OwnedFd, child: Mutex<Option<Child>>, pid: i32 }
+struct Inner {
+    state: Mutex<State>, cond: Condvar, callback: Mutex<Option<Callback>>, master: OwnedFd, child: Mutex<Option<Child>>, pid: i32,
+    cleanup_dirs: Mutex<Vec<PathBuf>>,
+}
 
 impl Inner {
+    fn cleanup(&self) {
+        let dirs = std::mem::take(&mut *self.cleanup_dirs.lock().unwrap());
+        for dir in dirs { let _ = fs::remove_dir_all(dir); }
+    }
+
     // Snapshot the callback out of its lock before calling: the callback may
     // acquire the GIL, which a GIL-holding thread setting the callback would
     // otherwise deadlock against.
@@ -35,6 +45,10 @@ impl Inner {
         let cb = self.callback.lock().unwrap().clone();
         if let Some(cb) = cb { cb(); }
     }
+}
+
+impl Drop for Inner {
+    fn drop(&mut self) { self.cleanup(); }
 }
 
 pub struct PtyCore { inner: Arc<Inner> }
@@ -64,7 +78,7 @@ impl PtyCore {
         drop(cmd); // close the parent's slave fds, so EOF can arrive on the master
         let pid = child.id() as i32;
         let inner = Arc::new(Inner { state: Mutex::new(State { ring: Ring::new(buffer_bytes), alive: true, exit_code: None, last_activity: now() }),
-            cond: Condvar::new(), callback: Mutex::new(None), master, child: Mutex::new(Some(child)), pid });
+            cond: Condvar::new(), callback: Mutex::new(None), master, child: Mutex::new(Some(child)), pid, cleanup_dirs: Mutex::new(Vec::new()) });
         let t_inner = inner.clone();
         thread::Builder::new().name("ptymini-reader".into()).spawn(move || reader(t_inner))?;
         Ok(PtyCore { inner })
@@ -101,6 +115,37 @@ impl PtyCore {
         if !self.alive() { return Err(io::Error::from_raw_os_error(libc::ESRCH)); }
         let r = unsafe { libc::kill(self.inner.pid, sig) };
         if r < 0 { Err(io::Error::last_os_error()) } else { Ok(()) }
+    }
+
+    fn kill_group(&self, sig: i32) {
+        if !self.alive() { return; }
+        unsafe { libc::kill(-self.inner.pid, sig); }
+    }
+
+    /// Escalate SIGHUP/SIGCONT/SIGINT/SIGTERM, then SIGKILL if `force`.
+    /// Returns true only once EOF is observed and the child is reaped (`!alive()`).
+    pub fn terminate(&self, force: bool) -> bool {
+        const STEP: f64 = 0.1;
+        const KILL_WAIT: f64 = 0.5;
+        if !self.alive() { return true; }
+        for sig in [libc::SIGHUP, libc::SIGCONT, libc::SIGINT, libc::SIGTERM] {
+            if !self.alive() { return true; }
+            let _ = self.kill(sig);
+            if self.wait(Some(STEP)).is_some() || !self.alive() { return true; }
+        }
+        if !self.alive() { return true; }
+        if force {
+            self.kill_group(libc::SIGKILL);
+            let _ = self.kill(libc::SIGKILL);
+            let _ = self.wait(Some(KILL_WAIT));
+        }
+        !self.alive()
+    }
+
+    /// Register a temporary directory (e.g. an rc dir) to remove once the child is reaped or `PtyCore` drops.
+    pub fn set_cleanup_dir(&self, dir: PathBuf) {
+        self.inner.cleanup_dirs.lock().unwrap().push(dir);
+        if !self.alive() { self.inner.cleanup(); }
     }
 
     pub fn read_from(&self, offset: u64, max_bytes_out: Option<usize>) -> (Vec<u8>, u64, u64) {
@@ -179,11 +224,13 @@ fn reader(inner: Arc<Inner>) {
             break; // 0 at EOF (macOS), EIO once the child is gone (Linux)
         }
     }
-    let code = inner.child.lock().unwrap().take().and_then(|mut c| c.wait().ok()).map(|s| s.code().unwrap_or_else(|| -s.signal().unwrap_or(0)));
+    let child = { inner.child.lock().unwrap().take() };
+    let code = child.and_then(|mut c| c.wait().ok()).map(|s| s.code().unwrap_or_else(|| -s.signal().unwrap_or(0)));
     {
         let mut st = inner.state.lock().unwrap();
         st.alive = false;
         st.exit_code = code;
     }
+    inner.cleanup();
     inner.notify();
 }

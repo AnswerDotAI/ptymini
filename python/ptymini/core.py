@@ -6,7 +6,7 @@ The ring and the pty process live in the Rust core (`ptymini._core`), which owns
 
 Docs: https://AnswerDotAI.github.io/ptymini/core.html.md"""
 
-import asyncio, itertools, logging, os, signal, time
+import asyncio, itertools, logging, os, shutil, signal, time
 from pathlib import Path
 from tempfile import mkdtemp
 from fastcore.basics import patch
@@ -19,7 +19,6 @@ __all__ = ['log', 'DEFAULT_ARGV', 'Ring', 'PtySession', 'Gap', 'PtyRegistry', 'c
 
 class PtySession:
     "One pty process: reads land in a `Ring`, a change event wakes waiters, EOF reaps the exit status."
-    delay = 0.1  # Seconds between escalation signals (ptyprocess's delayafterterminate)
 
     def __init__(self,
         argv:list[str],          # Command to spawn on the pty
@@ -84,18 +83,8 @@ class PtySession:
 
 @patch
 async def terminate(self:PtySession, force:bool=False)->bool:
-    "SIGHUP/SIGCONT/SIGINT/SIGTERM in turn, then SIGKILL if `force`; True if the child ended."
-    for sig in (signal.SIGHUP, signal.SIGCONT, signal.SIGINT, signal.SIGTERM):
-        if not self.alive: return True
-        try: self.kill(sig)
-        except ProcessLookupError: return True
-        await asyncio.sleep(self.delay)
-    if not self.alive: return True
-    if force:
-        try: self.kill(signal.SIGKILL)
-        except ProcessLookupError: return True
-        await asyncio.sleep(self.delay)
-    return not self.alive
+    "SIGHUP/SIGCONT/SIGINT/SIGTERM in turn, then SIGKILL if `force`; True once the child is reaped."
+    return await asyncio.to_thread(self.core.terminate, force)
 
 
 class Gap(int):
@@ -144,6 +133,7 @@ class PtyRegistry:
         if name and name in self.terms: return self.terms[name]
         name = name or self._next_name()
         argv = list(argv or self.argv)
+        rcdir = None
         if rc is not None:
             rcdir = mkdtemp(prefix='ptymini-rc-')
             rcfile = str(Path(rcdir)/'.zshrc')  # one name serves bash (--rcfile {rcfile}) and zsh (ZDOTDIR={rcdir})
@@ -153,7 +143,11 @@ class PtyRegistry:
             if env: env = {k: subst(v) for k, v in env.items()}
             if appendenv: appendenv = {k: subst(v) for k, v in appendenv.items()}
         full_env = dict(os.environ if env is None else env) | (appendenv or {})  # `env` replaces the inherited environment; `appendenv` overlays the base
-        t = PtySession(argv, cwd=cwd, env=full_env, rows=rows, cols=cols, name=name)
+        try: t = PtySession(argv, cwd=cwd, env=full_env, rows=rows, cols=cols, name=name)
+        except BaseException:
+            if rcdir: shutil.rmtree(rcdir, ignore_errors=True)
+            raise
+        if rcdir: t.core.set_cleanup_dir(rcdir)
         self.terms[name] = t
         return t
 

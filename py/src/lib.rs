@@ -4,6 +4,7 @@ use pyo3::exceptions::{PyProcessLookupError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use ptymini::PtyCore;
@@ -80,6 +81,13 @@ impl PyPtyCore {
     fn kill(&self, sig: i32) -> PyResult<()> {
         match self.core.kill(sig) { Err(e) if e.raw_os_error() == Some(libc::ESRCH) => Err(PyProcessLookupError::new_err("process not found")), r => Ok(r?) }
     }
+
+    /// Escalate SIGHUP/SIGCONT/SIGINT/SIGTERM, then SIGKILL if `force`; True once reaped.
+    #[pyo3(signature = (force=false))]
+    fn terminate(&self, py: Python, force: bool) -> bool { py.detach(|| self.core.terminate(force)) }
+
+    /// Register a temporary directory to remove once the child is reaped or dropped.
+    fn set_cleanup_dir(&self, path: String) { self.core.set_cleanup_dir(PathBuf::from(path)); }
 
     /// Read output from absolute `offset`, returning `(data, new_offset, dropped)`.
     #[pyo3(signature = (offset, max_bytes_out=None))]
