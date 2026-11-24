@@ -18,7 +18,8 @@ classifiers = [
 dependencies = ['fastcore>=2.1.18']
 
 [project.optional-dependencies]
-dev = ["fastws-cli>=0.0.20", "maturin>=1.0,<2.0", "pytest", "nbdev>=3", "fastship"]
+test = ["pytest", "nbdev>=3"]
+dev = ["fastws-cli>=0.0.20", "maturin>=1.0,<2.0", "fastship", "ptymini[test]"]
 
 [project.entry-points.pyskills]
 ptymini = "ptymini.skill"
