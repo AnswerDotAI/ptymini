@@ -1,7 +1,6 @@
-# NB: this file is designed for an LLM reader, not a human. Add it to your LLM's context and ask it to explain.
 r"""Drive line-oriented interactive programs in the background: REPLs, shells, ssh, debuggers. Start a pty session once, send input later, wait a bounded time for the reply, and read what arrived since your last look. Use this for CLI work. Use `fastmux` for TUIs, rich terminal apps, and terminals shared with the user.
 
-- `ptymini.bg` (bgterm): sync, sid-based, straight into the Rust pty core, no event loop; `ptymini.core`: asyncio (multi-client attach, replay buffers, named registry)
+- `ptymini.bg` (bgterm): sync, sid-based, straight into the Rust pty core, no event loop; `ptymini.core`: asyncio `PtySession`/`PtyRegistry` (multi-client attach, replay buffers, named registry; `doc(ptymini.core)`)
 - bgterm sessions: in-process; end with it
 
 ```python

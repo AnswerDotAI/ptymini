@@ -7,7 +7,7 @@ name = "ptymini"
 dynamic = ["version"]
 description = "Asyncio pty sessions: spawn, write, multi-client attach with replay, and a named registry"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = "Apache-2.0"
 authors = [{name = "Jeremy Howard", email = "github@jhoward.fastmail.fm"}]
 classifiers = [
@@ -18,7 +18,7 @@ classifiers = [
 dependencies = ['fastcore>=2.1.18']
 
 [project.optional-dependencies]
-test = ["fastws-cli>=0.0.42", "pytest", "nbdev>=3"]
+test = ["fastws-cli>=0.0.42", "pytest", "pytest-asyncio"]
 dev = ["maturin>=1.0,<2.0", "fastship", "ptymini[test]"]
 
 [project.entry-points.pyskills]
@@ -39,4 +39,7 @@ cache-keys = [{ file = "pyproject.toml" }, { file = "Cargo.toml" }, { file = "py
 [tool.fastship]
 branch = "main"
 
-[tool.nbdev]
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_default_fixture_loop_scope = "function"
+addopts = "-p asyncio"
